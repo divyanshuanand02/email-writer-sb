@@ -1,7 +1,8 @@
-package com.email.writer.app;
+package com.email.writer.app.services;
 
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.ObjectMapper;
+import com.email.writer.app.model.EmailRequest;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -24,7 +25,7 @@ public class EmailGeneratorService {
     }
 
     public String generateEmailReply(EmailRequest emailRequest){
-
+        System.out.println("generateEmailReply method called");
         String prompt = buildPrompt(emailRequest);
 
         Map<String, Object> requestBody = Map.of(
