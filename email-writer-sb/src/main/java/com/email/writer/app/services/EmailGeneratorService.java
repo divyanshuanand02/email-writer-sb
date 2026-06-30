@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
@@ -40,8 +41,15 @@ public class EmailGeneratorService {
         this.usageTracker = usageTracker;
     }
 
+    /**
+     * Cached by (emailContent, tone): a cache hit returns the stored reply without
+     * entering this method, so cached responses make no Gemini call and record zero
+     * tokens. Caching is best-effort — see {@code CacheConfig} error handler.
+     */
+    @Cacheable(value = "emailReplies",
+            key = "#emailRequest.emailContent + '::' + #emailRequest.tone")
     public String generateEmailReply(EmailRequest emailRequest) {
-        log.debug("generateEmailReply called");
+        log.debug("generateEmailReply called (cache miss)");
         String prompt = buildPrompt(emailRequest);
 
         Map<String, Object> requestBody = Map.of(

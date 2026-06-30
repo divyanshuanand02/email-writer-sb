@@ -126,3 +126,67 @@ gemini.cost.output-per-1m=0.40
 
 - Branch `phase-2-token-tracking`; message `Phase 2: token usage tracking & cost estimation`.
 - Update README to add a "Token usage & cost tracking" subsection once verified.
+
+---
+
+# Phase 3 — Execution Notes (Redis + Spring Cache)
+
+## Hard constraints / decisions
+
+- **Graceful degradation is mandatory.** There is no Redis running in this env
+  (no Docker). A failed cache op MUST NOT break `/generate`. Implement
+  `CachingConfigurer.errorHandler()` returning a `CacheErrorHandler` that logs and
+  swallows get/put/evict/clear errors → requests fall through to the real Gemini
+  call when Redis is unreachable.
+- **Cache hits cost 0 tokens.** Put `@Cacheable` on `generateEmailReply` itself, so
+  a hit returns the cached String without entering the method — usage recording
+  never runs, so cached responses naturally record zero tokens. This is the Phase 2
+  interaction note made concrete; do NOT move usage recording above the cache.
+- Connection is **lazy** (Lettuce) — adding the starter + cache manager bean does
+  NOT connect at startup, so `contextLoads` and unit tests still pass without Redis.
+
+## Changes
+
+### `pom.xml`
+- `spring-boot-starter-data-redis`
+- `spring-boot-starter-cache`
+
+### `config/CacheConfig.java` (rewrite the stub)
+- `@Configuration @EnableCaching`, implement `CachingConfigurer`.
+- `@Bean RedisCacheManager` with `RedisCacheConfiguration`:
+  - `entryTtl(Duration.ofHours(24))`
+  - keys: `StringRedisSerializer`
+  - values: `GenericJackson2JsonRedisSerializer`
+  - `disableCachingNullValues()`
+- Override `errorHandler()` → custom `CacheErrorHandler` (log WARN, swallow).
+
+### `services/EmailGeneratorService.java`
+- Annotate `generateEmailReply`:
+  `@Cacheable(value = "emailReplies", key = "#emailRequest.emailContent + '::' + #emailRequest.tone")`
+- Note: a `null` tone renders as the string `"null"` in the key — acceptable.
+
+### `application.properties`
+```
+spring.data.redis.host=localhost
+spring.data.redis.port=6379
+```
+
+### `docker-compose.yml` (new, repo root or backend dir)
+- `redis:7-alpine`, port 6379, for local dev / real cache testing.
+
+## Gotchas
+- `@Cacheable` only applies on calls through the Spring proxy (controller →
+  service). Internal self-calls would bypass it — current flow is external, fine.
+- `EmailRequest` (Lombok `@Data`) already has value-based equals/hashCode, but the
+  cache key here is an explicit SpEL string, not hashCode — deterministic.
+- Cost rates note from Phase 2 still applies.
+
+## Test / verify
+- `./mvnw test` must still pass with NO Redis running (proves graceful degradation
+  path + lazy connection).
+- Optional real test (needs Docker/Redis): `docker compose up -d redis`, start app,
+  POST same body twice → 2nd is instant, `usage` requestCount increments only on the
+  miss, `redis-cli KEYS 'emailReplies*'` shows the entry.
+
+## Commit
+- Branch `phase-3-redis-cache`; message `Phase 3: Redis response caching via Spring Cache`.
