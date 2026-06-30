@@ -17,7 +17,7 @@ rate limiting, both already merged).
 | Spring Boot backend + Gemini integration | ✅ Done |
 | Layered Controller → Service | ✅ Done (no separate Client layer) |
 | Bucket4j per-IP rate limiting | ✅ Done |
-| WebClient for Gemini calls | ⚠️ Uses `.block()` on servlet stack — effectively blocking |
+| WebClient for Gemini calls | ⚠️ Uses `.block()` on servlet stack — effectively blocking. Phase 5: README wording corrected to be honest (kept blocking by design — see below). |
 | Redis + Spring Cache response caching | ❌ `CacheConfig` is a disabled `TODO(Phase 2)` stub |
 | Token usage tracking + cost estimation | ❌ Not implemented |
 | Chrome extension (manifest, content.js) | ✅ Built — lives in separate folder `E:/email-generator-ext` (MV3, MutationObserver, button injection, fetch, insert). Phase 4.1 fixes applied: loop bugs fixed + tone selector added. |
@@ -127,8 +127,12 @@ servlet stack. Either make it true or soften the wording.
 - Keep blocking call; update resume/README to "WebClient-based integration" without the
   "non-blocking performance" claim.
 
-**Decision:** default to Option B unless we want the reactive refactor; revisit after
-Phases 2–4.
+**Decision:** chose **Option B** (done). Rationale: a reactive refactor (controller
+returns `Mono`, drop `.block()`) conflicts with Phase 3 — Spring `@Cacheable` does not
+cache `Mono` emissions correctly, so going non-blocking would break Redis caching. The
+blocking call is the right design alongside caching + the servlet rate-limit
+interceptor. README tech-stack wording was corrected to describe `WebClient` as used
+synchronously rather than claiming a non-blocking/WebFlux service.
 
 ---
 

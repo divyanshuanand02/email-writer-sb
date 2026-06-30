@@ -8,10 +8,13 @@ The extension extracts email content from the Gmail UI and sends it to a backend
 ## 🚀 Features
 
 * Generate AI-powered email replies directly inside Gmail
-* Multiple tone support (Professional, Casual, Sarcastic, etc.)
+* Multiple tone support via an in-toolbar dropdown (Professional, Casual, Friendly, Formal, Concise, Sarcastic)
 * Chrome Extension integration with Gmail UI
 * Spring Boot backend service
-* Google Gemini API integration
+* Google Gemini API integration via Spring's `WebClient`
+* Per-IP rate limiting with Bucket4j (token-bucket, returns HTTP 429)
+* Redis response caching via Spring Cache (identical requests skip Gemini; graceful degradation if Redis is down)
+* Token usage tracking & cost estimation parsed from Gemini `usageMetadata` (Jackson), exposed at `/api/email/usage`
 * Automatic reply insertion into Gmail compose box
 * MutationObserver-based DOM detection for Gmail compose windows
 
@@ -40,11 +43,15 @@ Inserted back into Gmail Compose Box
 ### Backend
 
 * Java 21
-* Spring Boot
-* Spring WebFlux
-* WebClient
-* Jackson
+* Spring Boot 4
+* Spring Web (servlet MVC — the request stack)
+* Spring `WebClient` (from WebFlux) for the outbound Gemini call — used synchronously (`.block()`), since the response is cached and the request path is servlet-based
+* Spring Cache + Spring Data Redis (response caching)
+* Bucket4j (rate limiting)
+* Jackson (response parsing, token usage)
 * Maven
+
+> Note: `WebClient` here is the reactive HTTP client used in blocking mode for a single outbound call — the application itself is not a reactive/non-blocking WebFlux service.
 
 ### Frontend (Extension)
 
@@ -62,21 +69,27 @@ Inserted back into Gmail Compose Box
 ## 📂 Project Structure
 
 ```
-email-writer/
+email-writer-sb/
 │
-├── backend/
-│   ├── controller
-│   │   └── EmailGeneratorController.java
-│   ├── service
-│   │   └── EmailGeneratorService.java
-│   ├── model
-│   │   └── EmailRequest.java
-│   └── application.properties
+├── email-writer-sb/                         # Spring Boot backend (Maven module)
+│   ├── src/main/java/com/email/writer/app/
+│   │   ├── controller/EmailGeneratorController.java
+│   │   ├── services/
+│   │   │   ├── EmailGeneratorService.java
+│   │   │   ├── RateLimitingService.java
+│   │   │   ├── CostEstimator.java
+│   │   │   └── UsageTracker.java
+│   │   ├── config/                          # WebClient, Web (interceptors), Cache (Redis)
+│   │   ├── ratelimit/RateLimitInterceptor.java
+│   │   ├── exception/GeminiUnavailableException.java
+│   │   └── model/                           # EmailRequest, TokenUsage
+│   ├── src/main/resources/application.properties
+│   └── docker-compose.yml                   # local Redis
 │
-├── extension/
+├── extension/                               # Chrome extension (MV3)
 │   ├── manifest.json
 │   ├── content.js
-│   └── styles.css
+│   └── content.css
 │
 └── README.md
 ```
@@ -101,7 +114,17 @@ gemini.api.url=https://generativelanguage.googleapis.com/v1beta/models/gemini-1.
 gemini.api.key=YOUR_GEMINI_API_KEY
 ```
 
-### 3️⃣ Run the Spring Boot application
+### 3️⃣ (Optional) Start Redis for response caching
+
+```
+docker compose up -d redis
+```
+
+Redis is optional — if it isn't running, caching is skipped and the app still
+serves replies (it degrades gracefully). Configure host/port via
+`spring.data.redis.host` / `spring.data.redis.port`.
+
+### 4️⃣ Run the Spring Boot application
 
 ```
 mvn spring-boot:run
@@ -170,6 +193,32 @@ Best regards,
 [Your Name]
 ```
 
+On a Gemini failure (bad key, quota, network) the endpoint returns **502 Bad Gateway**
+instead of a raw 500. Each client IP is rate limited (HTTP **429** when exceeded).
+
+### Cumulative Token Usage
+
+**GET**
+
+```
+/api/email/usage
+```
+
+Returns cumulative tokens and estimated cost since the process started:
+
+```
+{
+  "requestCount": 1,
+  "promptTokens": 11,
+  "completionTokens": 7,
+  "totalTokens": 18,
+  "estimatedCostUsd": 3.9e-6
+}
+```
+
+> Cost is an estimate from configurable per-1M-token rates
+> (`gemini.cost.input-per-1m` / `output-per-1m`) — verify against current Gemini pricing.
+
 ---
 
 ## 🔐 CORS Configuration
@@ -215,11 +264,11 @@ AI Generated Response Appears
 
 ## 📈 Future Improvements
 
-* Tone selection dropdown
 * Reply editing suggestions
 * Email summarization
 * Multi-language support
 * Gmail thread context understanding
+* Persist usage totals (e.g. in Redis) across restarts
 * Deployment to cloud (AWS / GCP)
 
 ---
