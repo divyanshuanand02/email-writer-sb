@@ -1,5 +1,6 @@
 package com.email.writer.app.services;
 
+import com.email.writer.app.exception.GeminiUnavailableException;
 import com.email.writer.app.model.EmailRequest;
 import com.email.writer.app.model.TokenUsage;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -9,6 +10,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 
 import java.util.Map;
 
@@ -50,13 +52,24 @@ public class EmailGeneratorService {
                 }
         );
 
-        String response = webClient.post()
-                .uri(geminiApiUrl + geminiApiKey)
-                .header("Content-Type", "application/json")
-                .bodyValue(requestBody)
-                .retrieve()
-                .bodyToMono(String.class)
-                .block();
+        String response;
+        try {
+            response = webClient.post()
+                    .uri(geminiApiUrl + geminiApiKey)
+                    .header("Content-Type", "application/json")
+                    .bodyValue(requestBody)
+                    .retrieve()
+                    .bodyToMono(String.class)
+                    .block();
+        } catch (WebClientResponseException e) {
+            // Non-2xx from Gemini (bad key, quota exceeded, etc.)
+            log.warn("Gemini API returned {}: {}", e.getStatusCode(), e.getResponseBodyAsString());
+            throw new GeminiUnavailableException("Gemini API error: " + e.getStatusCode(), e);
+        } catch (Exception e) {
+            // Network error, timeout, or any other failure reaching Gemini
+            log.warn("Gemini API call failed", e);
+            throw new GeminiUnavailableException("Could not reach the Gemini API", e);
+        }
 
         return handleResponse(response);
     }
