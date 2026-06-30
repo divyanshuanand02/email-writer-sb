@@ -3,3 +3,6 @@
 
 # IDE compiler output
 /out/
+
+# Local portable Redis binaries (used when Docker isn't available)
+/.redis/
