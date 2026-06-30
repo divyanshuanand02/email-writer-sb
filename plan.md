@@ -20,7 +20,7 @@ rate limiting, both already merged).
 | WebClient for Gemini calls | ⚠️ Uses `.block()` on servlet stack — effectively blocking |
 | Redis + Spring Cache response caching | ❌ `CacheConfig` is a disabled `TODO(Phase 2)` stub |
 | Token usage tracking + cost estimation | ❌ Not implemented |
-| Chrome extension (manifest, content.js) | ✅ Built — lives in separate folder `E:/email-generator-ext` (MV3, MutationObserver, button injection, fetch, insert). Has bugs/gaps — see Phase 4. |
+| Chrome extension (manifest, content.js) | ✅ Built — lives in separate folder `E:/email-generator-ext` (MV3, MutationObserver, button injection, fetch, insert). Phase 4.1 fixes applied: loop bugs fixed + tone selector added. |
 
 ---
 
@@ -83,15 +83,19 @@ the `CacheConfig` `TODO(Phase 2)` made real.
 (MutationObserver compose detection, "AI Reply" button injection, fetch to
 `http://localhost:8081/api/email/generate`, insert via `execCommand`), and `content.css`.
 
-**Bugs found (fix in a Phase 4.1 polish pass):**
-- `getEmailContent()` — `return ''` is **inside** the `for` loop, so only the first
-  selector (`.h7`) is ever checked; if it's absent the function returns `''` immediately
-  instead of trying the other selectors. Move the `return '';` after the loop.
-- `findComposeToolbar()` — same bug: `return null` is inside the loop, so only `.btC`
-  is checked. Move `return null;` after the loop.
-- Tone is hard-coded to `"professional"` in the fetch body, but the resume claims
-  "multiple tone support." Add a tone dropdown in the toolbar and pass its value.
-- `execCommand('insertText', ...)` is deprecated; acceptable for now, note as tech debt.
+**Bugs found — FIXED in Phase 4.1:**
+- ✅ `getEmailContent()` — `return ''` was **inside** the `for` loop, so only the first
+  selector (`.h7`) was ever checked. Moved `return '';` after the loop so all
+  selectors are tried.
+- ✅ `findComposeToolbar()` — same bug: `return null` was inside the loop. Moved it
+  after the loop.
+- ✅ Tone was hard-coded to `"professional"`. Added a `createToneSelector()` dropdown
+  (Professional/Casual/Friendly/Formal/Concise/Sarcastic) injected into the toolbar;
+  its value is sent in the fetch body. Backend accepts arbitrary tone strings, so no
+  backend change needed. Styled in `content.css` (was empty).
+
+**Remaining tech debt (not blocking):**
+- `execCommand('insertText', ...)` is deprecated; acceptable for now.
 
 **Optional enhancements:**
 - `popup.html` + `popup.js`: backend URL config + default tone.
