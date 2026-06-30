@@ -1,0 +1,27 @@
+/* AI Reply button injected into the Gmail compose toolbar */
+.ai-reply-button {
+    cursor: pointer;
+    user-select: none;
+}
+
+.ai-reply-button[disabled] {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+/* Tone selector dropdown next to the AI Reply button */
+.ai-tone-select {
+    margin-right: 8px;
+    height: 36px;
+    padding: 0 8px;
+    border: 1px solid #dadce0;
+    border-radius: 18px;
+    background: #fff;
+    color: #3c4043;
+    font-size: 14px;
+    cursor: pointer;
+}
+
+.ai-tone-select:hover {
+    background: #f6f8fc;
+}
