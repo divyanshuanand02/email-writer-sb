@@ -1,0 +1,5 @@
+# IntelliJ run configurations may contain secrets (API keys) — keep them local
+/.run/
+
+# IDE compiler output
+/out/
